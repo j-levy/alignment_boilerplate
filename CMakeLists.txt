@@ -92,5 +92,10 @@ add_executable(random_sequence_generator
 )
 target_link_libraries(random_sequence_generator PUBLIC albp)
 
+add_executable(run_sw_cpu
+  programs/run_sw_cpu.cpp
+)
+target_link_libraries(run_sw_cpu PUBLIC albp)
+
 # configure_file(unittests/test.fasta ${CMAKE_BINARY_DIR}/test.fasta COPYONLY)
 # configure_file(unittests/test_target.fasta ${CMAKE_BINARY_DIR}/test_target.fasta COPYONLY)
