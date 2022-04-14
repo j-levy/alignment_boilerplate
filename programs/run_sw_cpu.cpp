@@ -4,17 +4,22 @@
 #include <limits>
 #include <iostream>
 
+#include "omp.h"
+
 int main(int argc, char **argv)
 {
-    if (argc < 3)
-    {
-        std::cout << argv[0] << " <Fastq File> <Fasta File> [Fasta File...]" << std::endl;
-        return -1;
-    }
+    std::string q = "query_batch.fasta";
+    std::string t = "target_batch.fasta";
 
-    std::cout << "filename minlen maxlen avglen total_bytes\n";
-    albp::FastaInput query = albp::ReadFasta(argv[1]);
-    albp::FastaInput target = albp::ReadFasta(argv[2]);
+    if (argc == 3)
+    {
+        q = argv[1];
+        t = argv[2];
+    } 
+
+    // std::cout << "filename minlen maxlen avglen total_bytes\n";
+    albp::FastaInput query = albp::ReadFasta(q.c_str());
+    albp::FastaInput target = albp::ReadFasta(t.c_str());
 
     for (int i = 1; i < argc; i++)
     {
@@ -39,13 +44,19 @@ int main(int argc, char **argv)
                   << " " << total_len
                   << "\n";
     }
-    printf("query sequence count = %d\n", query.sequence_count());
-    printf("targe sequence count = %d\n", target.sequence_count());
+    // printf("query sequence count = %ld\n", query.sequence_count());
+    // printf("targe sequence count = %ld\n", target.sequence_count());
 
-    for (uint i = 0; i < query.sequence_count(); i++)
+    std::vector<std::pair<int, int>> scores;
+
+    uint inf = 0;
+    uint sup = 20;
+    
+    for (uint i = inf; i < sup; i++)
     {
-        albp::SimpleSmithWatermanResult res = albp::simple_smith_waterman(query.sequences[i], target.sequences[i], -1, -2, 5, -2);
-        printf("%d\t%d\n", i, res.score);        
+        int x = 0, y = 0;
+        albp::SimpleSmithWatermanResult res = albp::simple_smith_waterman(query.sequences.at(i), target.sequences.at(i), -6, -1, 1, -4, &x, &y);
+        printf("%d\t%d\t(%d, %d)(%d-%d)\n", i, res.score, x, y, query.sequences.at(i).length(), target.sequences.at(i).length());
     }
 
     return 0;

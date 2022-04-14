@@ -141,7 +141,8 @@ SimpleSmithWatermanResult simple_smith_waterman(
   const int gap_open,
   const int gap_extend,
   const int match_score,
-  const int mismatch_score
+  const int mismatch_score,
+  int* max_x, int* max_y
 );
 
 }

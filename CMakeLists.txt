@@ -21,6 +21,7 @@ else()
     $<$<COMPILE_LANGUAGE:CXX>:-Wall>
     $<$<COMPILE_LANGUAGE:CXX>:-pedantic>
     $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
+    $<$<COMPILE_LANGUAGE:CXX>:-fopenmp>
   )
 endif()
 
@@ -32,8 +33,8 @@ add_library(albp
   src/simple_sw.cpp
   src/stream_manager.cpp
 )
-target_include_directories(albp PUBLIC include ${CUDA_INCLUDE_DIRS})
-target_link_libraries(albp PUBLIC ${CUDA_LIBRARIES})
+target_include_directories(albp PUBLIC include ${CUDA_INCLUDE_DIRS} ${OpenMP_INCLUDE_DIRS})
+target_link_libraries(albp PUBLIC ${CUDA_LIBRARIES}  ${OpenMP_CXX_LIBRARIES})
 # set_target_properties(gasal2 PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
 # set_target_properties(gasal2 PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 
@@ -96,6 +97,5 @@ add_executable(run_sw_cpu
   programs/run_sw_cpu.cpp
 )
 target_link_libraries(run_sw_cpu PUBLIC albp)
-
 # configure_file(unittests/test.fasta ${CMAKE_BINARY_DIR}/test.fasta COPYONLY)
 # configure_file(unittests/test_target.fasta ${CMAKE_BINARY_DIR}/test_target.fasta COPYONLY)
