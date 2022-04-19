@@ -1,5 +1,6 @@
 
 #include <cuda_runtime.h>
+#include <cooperative_groups.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,6 +35,9 @@ __global__ void sw_antidiag(int* score,
     max_score = 0;
 
     int threadIndex = blockIdx.x * blockDim.x + threadIdx.x;
+    auto grid = cooperative_groups::this_grid();
+    auto block = cooperative_groups::this_thread_block();
+
     if (threadIndex == 0)
         max_score = -1;
 
@@ -86,6 +90,8 @@ __global__ void sw_antidiag(int* score,
         }
 
         __syncthreads();
+        grid.sync();
+    
 
         E_diag_minus1[norm_index] = E;
         F_diag_minus1[norm_index] = F;
@@ -94,6 +100,7 @@ __global__ void sw_antidiag(int* score,
         H_diag_minus1[norm_index] = H;
         if(DEBUG_PRINT > 12) {
             __syncthreads();
+            grid.sync();
             if(threadIndex == 0)
             {
                 printf("H_diag_minus2 = ");
@@ -105,6 +112,8 @@ __global__ void sw_antidiag(int* score,
             }
         }
         __syncthreads();
+        grid.sync();
+
         for (int k = 0; k < diagonalSize; k++) // k has the same role as threadIndex???
         {
             if (max_score < H_diag_minus1[k])
@@ -117,6 +126,7 @@ __global__ void sw_antidiag(int* score,
         }
         if(DEBUG_PRINT > 10) {
             __syncthreads();
+            grid.sync();
             if(threadIndex == 0)
             {
                 printf("\nMax score: %d\t final_pos=%d %d\n", max_score, max_pos_col, max_pos_row);
@@ -127,6 +137,7 @@ __global__ void sw_antidiag(int* score,
 
     }
     __syncthreads();
+    grid.sync();
     *score = max_score;
     final_pos->x = max_pos_col;
     final_pos->y = max_pos_row; 
@@ -166,7 +177,7 @@ int antidiag(
     const int diagonalSize = std::min(query_length + 1, target_length + 1);
 
     // we need as many threads as diagonalSize
-    const int blockSize = 256;
+    const int blockSize = 128;
     const int gridSize = 1 + diagonalSize / blockSize; //(diagonalSize % blockSize) == 0 ? (diagonalSize / blockSize) : (diagonalSize / blockSize + 1);
     fprintf(stderr, "%d %d => %d\t ", blockSize, gridSize, blockSize * gridSize);
     // *** memory allocation ***
