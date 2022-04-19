@@ -6,6 +6,11 @@ find_package(CUDA REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(CUDA REQUIRED)
 
+
+if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+  set(CMAKE_CUDA_ARCHITECTURES 75)
+endif()
+
 #TODO: Probably remove this before release since a standard user won't recompile
 #many times
 find_program(CCACHE_FOUND ccache)
@@ -32,6 +37,7 @@ add_library(albp
   src/read_fasta.cpp
   src/simple_sw.cpp
   src/stream_manager.cpp
+  src/antidiag.cu
 )
 target_include_directories(albp PUBLIC include ${CUDA_INCLUDE_DIRS} ${OpenMP_INCLUDE_DIRS})
 target_link_libraries(albp PUBLIC ${CUDA_LIBRARIES}  ${OpenMP_CXX_LIBRARIES})
@@ -45,6 +51,10 @@ endif()
 if(DEFINED GPU_COMPUTE_ARCH)
   target_compile_options(albp PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-arch ${GPU_COMPUTE_ARCH}>)
 endif()
+
+target_compile_options(albp PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+                       --generate-line-info
+                       >)
 
 set_target_properties(albp PROPERTIES
   POSITION_INDEPENDENT_CODE ON
@@ -97,5 +107,11 @@ add_executable(run_sw_cpu
   programs/run_sw_cpu.cpp
 )
 target_link_libraries(run_sw_cpu PUBLIC albp)
+
+add_executable(run_sw_antidiag
+  programs/run_sw_antidiag.cpp
+)
+target_link_libraries(run_sw_antidiag PUBLIC albp)
+
 # configure_file(unittests/test.fasta ${CMAKE_BINARY_DIR}/test.fasta COPYONLY)
 # configure_file(unittests/test_target.fasta ${CMAKE_BINARY_DIR}/test_target.fasta COPYONLY)

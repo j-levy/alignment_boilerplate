@@ -1,5 +1,5 @@
 #include <albp/read_fasta.hpp>
-#include <albp/simple_sw.hpp>
+#include <albp/antidiag.hpp>
 
 #include <limits>
 #include <iostream>
@@ -47,16 +47,23 @@ int main(int argc, char **argv)
     // printf("query sequence count = %ld\n", query.sequence_count());
     // printf("targe sequence count = %ld\n", target.sequence_count());
 
+
+    //     int x = 0, y = 0;
+    //     int res = albp::antidiag("AAA", "TAA", 6, 1, 1, -4, &x, &y);
+    //     printf("%d\t%d\t(%d, %d)(%ld-%ld)\n", 0, res, x, y, 3, 3);
+
+    // return 0;
+
     std::vector<std::pair<int, int>> scores;
 
     uint inf = 0;
-    uint sup = 30;
+    uint sup = 10;
     
     for (uint i = inf; i < sup; i++)
     {
         int x = 0, y = 0;
-        albp::SimpleSmithWatermanResult res = albp::simple_smith_waterman(query.sequences.at(i), target.sequences.at(i), -6, -1, 1, -4, &x, &y);
-        printf("%d\t%d\t(%d, %d)(%ld-%ld)\n", i, res.score, x, y, query.sequences.at(i).length(), target.sequences.at(i).length());
+        int res = albp::antidiag(query.sequences.at(i), target.sequences.at(i), 6, 1, 1, -4, &x, &y);
+        printf("%d\t%d\t(%d, %d)(%ld-%ld)\n", i, res, x, y, query.sequences.at(i).length(), target.sequences.at(i).length());
     }
 
     return 0;
