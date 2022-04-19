@@ -12,6 +12,8 @@
 
 #define DEBUG_PRINT (0)
 
+static __constant__ int query_length_, target_length_, match_score_, mismatch_score_, gap_open_, gap_extend_;
+
 __global__ void sw_antidiag(int* score, 
                             int2* final_pos, 
                             int* H_diag_minus2, 
@@ -19,18 +21,12 @@ __global__ void sw_antidiag(int* score,
                             int* E_diag_minus1, 
                             int* F_diag_minus1,
                             char* query_seq,
-                            char* target_seq,
-                            const int query_length,
-                            const int target_length,
-                            const int match_,
-                            const int mismatch_,
-                            const int gapOpen_,
-                            const int gapExtend_
+                            char* target_seq
                            )
 {
 
-    const int diagonalsNumber = query_length + target_length;
-    const int diagonalSize = MIN(query_length + 1, target_length + 1);
+    const int diagonalsNumber = query_length_ + target_length_;
+    const int diagonalSize = MIN(query_length_ + 1, target_length_ + 1);
     int diagonalIndex = 0;
     
     __shared__ int max_score;
@@ -52,29 +48,29 @@ __global__ void sw_antidiag(int* score,
     for (diagonalIndex = 0; diagonalIndex < diagonalsNumber; diagonalIndex++)
     {
         // current_row / current_col goes from -1 to length-1, and is an index to the sequence (0->length-1 included)
-        current_row = query_length - 1 - threadIndex;
+        current_row = query_length_ - 1 - threadIndex;
         current_col = diagonalIndex - current_row - 1;
         norm_index = threadIndex;
 
-        if (current_row < 0 || current_row > query_length - 1)
+        if (current_row < 0 || current_row > query_length_ - 1)
             rowCode = -1;
         else
             rowCode = query_seq[current_row];
 
-        if (current_col < 0 || current_col > target_length - 1)
+        if (current_col < 0 || current_col > target_length_ - 1)
             colCode = -2;
         else
             colCode = target_seq[current_col];
         
 
-        const int E_1 = E_diag_minus1[norm_index] - gapExtend_;
-        const int F_1 = F_diag_minus1[norm_index + 1] - gapExtend_;
-        const int E_2 = H_diag_minus1[norm_index] - gapOpen_;
-        const int F_2 = H_diag_minus1[norm_index + 1] - gapOpen_;
-        E = current_col >= 0 && current_col < target_length ? MAX(E_1, E_2) : 0;
-        F = current_row >= 0 && current_row < query_length ? MAX(F_1, F_2) : 0;
+        const int E_1 = E_diag_minus1[norm_index] - gap_extend_;
+        const int F_1 = F_diag_minus1[norm_index + 1] - gap_extend_;
+        const int E_2 = H_diag_minus1[norm_index] - gap_open_;
+        const int F_2 = H_diag_minus1[norm_index + 1] - gap_open_;
+        E = current_col >= 0 && current_col < target_length_ ? MAX(E_1, E_2) : 0;
+        F = current_row >= 0 && current_row < query_length_ ? MAX(F_1, F_2) : 0;
         
-        matchScore = (rowCode == colCode) ? match_ : mismatch_;
+        matchScore = (rowCode == colCode) ? match_score_ : mismatch_score_;
         H = MAX4(H_diag_minus2[norm_index + 1] + matchScore, E, F, 0);
 
         if (DEBUG_PRINT > 20){
@@ -115,7 +111,7 @@ __global__ void sw_antidiag(int* score,
             {
                 max_score = H_diag_minus1[k];
                 // norm_index = k = threadIndex - 1 - (diagonalIndex) + query_length
-                max_pos_row = query_length - 1 - k;
+                max_pos_row = query_length_ - 1 - k;
                 max_pos_col = diagonalIndex - max_pos_row - 1;
             }
         }
@@ -137,6 +133,15 @@ __global__ void sw_antidiag(int* score,
     //-----------------------------------------------------------
     
 }
+
+struct launch_configuration {
+    dim3 grid_dimensions;
+    dim3 block_dimensions;
+    size_t dynamic_shared_memory_size;
+    cudaStream_t stream_id;
+};
+
+typedef struct launch_configuration launch_configuration_t;
 
 
 namespace albp {
@@ -160,10 +165,10 @@ int antidiag(
     const int target_length = seqb.length();
     const int diagonalSize = std::min(query_length + 1, target_length + 1);
 
-
+    // we need as many threads as diagonalSize
     const int blockSize = 256;
-    const int gridSize = (diagonalSize % blockSize) == 0 ? (diagonalSize / blockSize) : (diagonalSize / blockSize + 1);
-    
+    const int gridSize = 1 + diagonalSize / blockSize; //(diagonalSize % blockSize) == 0 ? (diagonalSize / blockSize) : (diagonalSize / blockSize + 1);
+    fprintf(stderr, "%d %d => %d\t ", blockSize, gridSize, blockSize * gridSize);
     // *** memory allocation ***
 
 
@@ -211,15 +216,53 @@ int antidiag(
     cudaMalloc(&final_pos_gpu, sizeof(int2));
     cudaMemset(final_pos_gpu, 0, sizeof(int2));
 
-
     cudaMemcpy(targetSequenceGpu, seqb.c_str(), target_length, cudaMemcpyHostToDevice);
     cudaMemcpy(querySequenceGpu, seqa.c_str(), query_length, cudaMemcpyHostToDevice);
 
+    cudaMemcpyToSymbol(query_length_, &query_length, sizeof(int));
+    cudaMemcpyToSymbol(target_length_, &target_length, sizeof(int));
+    cudaMemcpyToSymbol(match_score_, &match_score, sizeof(int));
+    cudaMemcpyToSymbol(mismatch_score_, &mismatch_score, sizeof(int));
+    cudaMemcpyToSymbol(gap_open_, &gap_open, sizeof(int));
+    cudaMemcpyToSymbol(gap_extend_, &gap_extend, sizeof(int));
+
+    // check if device support cooperative launch:
+    int dev = 0;
+    int supportsCoopLaunch = 0;
+    cudaDeviceGetAttribute(&supportsCoopLaunch, cudaDevAttrCooperativeLaunch, dev);
+    if (supportsCoopLaunch < 1)
+        exit(EXIT_FAILURE);
+
     // --------------- compute the stuff
     cudaDeviceSynchronize();
-    sw_antidiag <<<gridSize, blockSize>>>(score_gpu, final_pos_gpu, H_diag_minus2, H_diag_minus1, E_diag_minus1, F_diag_minus1,
-                                         querySequenceGpu, targetSequenceGpu,
-                                         query_length, target_length, match_score, mismatch_score, gap_open, gap_extend);
+    // arguments: score_gpu, final_pos_gpu, H_diag_minus2, H_diag_minus1, E_diag_minus1, F_diag_minus1, querySequenceGpu, targetSequenceGpu, query_length, target_length, match_score, mismatch_score, gap_open, gap_extend
+    launch_configuration_t launch_conf;
+    launch_conf.grid_dimensions = gridSize;
+    launch_conf.block_dimensions = blockSize;
+    launch_conf.dynamic_shared_memory_size = 0;
+    launch_conf.stream_id = 0;
+    
+    void* kernel_args[] = {
+        &score_gpu, 
+        &final_pos_gpu, 
+        &H_diag_minus2, 
+        &H_diag_minus1, 
+        &E_diag_minus1, 
+        &F_diag_minus1, 
+        &querySequenceGpu,
+        &targetSequenceGpu
+    };
+
+    cudaLaunchCooperativeKernel(
+        (void*) sw_antidiag,
+        launch_conf.grid_dimensions,
+        launch_conf.block_dimensions,
+        kernel_args,
+        launch_conf.dynamic_shared_memory_size,
+        launch_conf.stream_id
+    );
+    // 
+        
 
 
     // --------------- you gotta take the result back!
